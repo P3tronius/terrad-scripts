@@ -12,7 +12,7 @@ ARG ADDRESS_BOOK_URL=https://network.terra.dev/addrbook.json
 
 ###INSTALL ALL NECESSARY PACKAGES
 RUN apt update && apt upgrade -y &&\
-    apt install -y build-essential git wget liblz4-tool nodejs npm jq curl lz4 &&\
+    apt install -y build-essential git wget liblz4-tool nodejs npm jq curl lz4 vim &&\
     apt autoremove -y
 
 ###CREATE NEW USER $USER
