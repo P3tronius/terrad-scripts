@@ -34,6 +34,10 @@ RUN wget https://golang.org/dl/${GO} &&\
 
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(/usr/local/go/bin/go env GOPATH)/bin v1.41.1
 
+###INCREASE MAXIMUM NUMBER OF OPEN FILES
+RUN echo "*                soft    nofile          65535" >> /etc/security/limits.conf
+RUN echo "*                hard    nofile          65535" >> /etc/security/limits.conf
+
 ###INSTALL AND CONFIGURE TERRA
 RUN su $USER -c 'cd && . ~/.bashrc && git clone https://github.com/terra-project/core/ &&\
     cd core && git checkout master &&  make install'
