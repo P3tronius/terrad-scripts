@@ -20,10 +20,11 @@ while (true); do
     if [[ $difference -gt 2 ]]
     then
 		echo 'Missed votes! -> ' $difference
+		su -c "restart terra-price-feeder" # for upstart
+		# or use systemctl restart, etc
 		sendmail -t 'email@address.com' << EOF
 Subject: Oracle feeder restarted!
 EOF
-		su -c "restart terra-price-feeder"
 		sleep 60 # wait for stabilisation
     fi
 done;
