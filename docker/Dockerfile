@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:20.04 AS shell
 
 ###VARIABLES
 ARG DEBIAN_FRONTEND=noninteractive
@@ -11,9 +11,9 @@ ARG SNAPSHOT_FILE=columbus-4-default.20210805.0410.tar.lz4
 ARG ADDRESS_BOOK_URL=https://network.terra.dev/addrbook.json
 
 ###INSTALL ALL NECESSARY PACKAGES
-RUN apt update && apt upgrade -y &&\
-    apt install -y build-essential git wget liblz4-tool nodejs npm jq curl lz4 vim ssh &\
-    apt autoremove -y
+RUN apt update && apt upgrade -y
+RUN apt install -y build-essential git wget liblz4-tool nodejs npm jq curl lz4 vim ssh
+RUN apt autoremove -y
 
 ###CREATE NEW USER $USER
 RUN mkdir -p /home/$USER/.ssh && useradd -d /home/$USER $USER && usermod -aG sudo $USER &&\ 
@@ -44,11 +44,16 @@ RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/i
 RUN echo "*                soft    nofile          65535" >> /etc/security/limits.conf
 RUN echo "*                hard    nofile          65535" >> /etc/security/limits.conf
 
-###INSTALL AND CONFIGURE TERRA
-RUN su $USER -c 'cd && . ~/.bashrc && git clone https://github.com/terra-project/core/ &&\
-    cd core && git checkout master &&  make install'
 
-RUN su $USER -c ". ~/.bashrc && cd /home/$USER/core && terrad init '$MONIKER'"
+FROM shell AS terra
+###INSTALL AND CONFIGURE TERRA
+WORKDIR ~/terra
+RUN git clone https://github.com/terra-project/core/
+WORKDIR core
+RUN git checkout v0.4.6 
+RUN su $USER -c 'source ~/.bashrc && LEDGER_ENABLED=false make install'
+
+RUN su $USER -c ". ~/.bashrc && terrad init '$MONIKER'"
 
 RUN su $USER -c "curl $GENESIS > /home/$USER/.terrad/config/genesis.json"
 
@@ -85,68 +90,8 @@ IOSchedulingClass=realtime \n\
 WantedBy=multi-user.target \n\
 ' >> /etc/systemd/system/terrad.service
 
-###Install Prometheus
-# create user and data folders
-RUN groupadd --system prometheus
-RUN useradd -s /sbin/nologin --system -g prometheus prometheus
-WORKDIR /var/lib/prometheus
-WORKDIR /etc/prometheus
-WORKDIR /tmp
-RUN curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep browser_download_url | grep linux-amd64 | cut -d '"' -f 4 | wget -qi -
-RUN tar xvf prometheus*.tar.gz
-RUN mv /tmp/prometheus*/prometheus /tmp/prometheus*/promtool /usr/local/bin/
-RUN mv /tmp/prometheus*/consoles/ /tmp/prometheus*/console_libraries/ /etc/prometheus/
-RUN echo $'# my global config\n\
-global: \n\
-  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute. \n\
-  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute. \n\
-  # scrape_timeout is set to the global default (10s). \n\
- \n\
-# Alertmanager configuration \n\
-alerting: \n\
-  alertmanagers: \n\
-  - static_configs: \n\
-    - targets: \n\
-      # - alertmanager:9093 \n\
- \n\
-# Load rules once and periodically evaluate them according to the global evaluation_interval. \n\
-rule_files: \n\
-  # - "first_rules.yml" \n\
-  # - "second_rules.yml" \n\
- \n\
-# A scrape configuration containing exactly one endpoint to scrape: \n\
-# Here its Prometheus itself. \n\
-scrape_configs: \n\
-  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config. \n\
-  - job_name: "node_explorer" \n\
-    static_configs: \n\
-    - targets: ["localhost:9100"] \n\
-  - job_name: "terrad" \n\
-    static_configs: \n\
-    - targets: ["localhost:26660"] \n\
-  - job_name: "prometheus" \n\
-    static_configs: \n\
-    - targets: ["localhost:9190"] \n\
- \n\
-' >> /etc/prometheus/prometheus.yml
+# TODO: install node_exporter 
 
-# TODO: install node_exporter too
-
-# create service
-RUN echo $'[Unit] \n\
-Description=Prometheus \n\
-Wants=network-online.target \n\
-After=network-online.target \n\
-\n\
-[Service] \n\
-User=prometheus \n\
-Group=prometheus \n\
-Type=simple \n\
-ExecStart=/usr/local/bin/prometheus --config.file /etc/prometheus/prometheus.yml --storage.tsdb.path /var/lib/prometheus/ --web.console.templates=/etc/prometheus/consoles --web.console.libraries=/etc/prometheus/console_libraries --web.listen-address=:10090 \n\
-\n\
-[Install] \n\
-WantedBy=multi-user.target \n\
-' >> /etc/systemd/system/prometheus.service
 
 ###Install oracle-feeder services
 
