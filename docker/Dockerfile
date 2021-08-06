@@ -12,15 +12,21 @@ ARG ADDRESS_BOOK_URL=https://network.terra.dev/addrbook.json
 
 ###INSTALL ALL NECESSARY PACKAGES
 RUN apt update && apt upgrade -y &&\
-    apt install -y build-essential git wget liblz4-tool nodejs npm jq curl lz4 vim &&\
+    apt install -y build-essential git wget liblz4-tool nodejs npm jq curl lz4 vim ssh &\
     apt autoremove -y
 
 ###CREATE NEW USER $USER
-RUN mkdir -p /home/$USER/.ssh && touch /home/$USER/.ssh/authorized_keys &&\
-    useradd -d /home/$USER $USER && usermod -aG sudo $USER && chown -R $USER:$USER /home/$USER/ &&\
-    chmod 700 /home/$USER/.ssh && chmod 644 /home/$USER/.ssh/authorized_keys &&\
-    echo $USER ALL=NOPASSWD: ALL >> /etc/sudoers &&\
+RUN mkdir -p /home/$USER/.ssh && useradd -d /home/$USER $USER && usermod -aG sudo $USER &&\ 
+    echo $USER ALL=NOPASSWD: ALL >> /etc/sudoers &&\ 
     sed -i 's#terra:/bin/sh#/terra:/bin/bash#' /etc/passwd
+
+#enable no password login from current user (as terra user has no password anyway). Local path to update in the variable above.
+COPY $SSH_PUBLIC_KEY /home/$USER/.ssh/authorized_keys
+RUN chown -R $USER:$USER /home/$USER/ && chmod 700 /home/$USER/.ssh && chmod 644 /home/$USER/.ssh/authorized_keys
+
+###CONFIGURE AND RUN THE SSH SERVER
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+RUN /etc/init.d/ssh start
 
 ###EXPORT THE GO PATHS
 RUN echo export GOROOT=/usr/local/go >> /etc/profile &&\
@@ -149,6 +155,9 @@ WantedBy=multi-user.target \n\
 RUN systemctl daemon-reload
 RUN systemctl enable terrad.service
 RUN systemctl start terrad.service
+
+###LOGIN BY DEFAULT AS $USER
+USER $USER
 
 ###Download and unpack the latest snapshot, then delete it
 #If the snapshot is already present on the local machine, uncomment the following 3 lines and comment the next one.
